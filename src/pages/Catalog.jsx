@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { RefreshCw, Plus, Loader, AlertCircle, PackageOpen } from 'lucide-react'
+import { RefreshCw, Plus, Loader, AlertCircle, PackageOpen, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useGuns } from '../hooks/useGuns'
 import GUNS_LOCAL from '../data/guns'
 import GunCard from '../components/gun/GunCard'
@@ -27,12 +27,21 @@ export default function Catalog({ onNavigate }) {
   // ---- API data ----
   const { guns: apiGuns, loading, error, refetch } = useGuns({ limit: 50 })
   const [useLocal, setUseLocal] = useState(false)
+  const [pageState, setPageState] = useState({ filters: '', page: 1 })
+  const pageSize = 6
 
   // Decide data source
   const rawGuns = useMemo(() => {
     if (useLocal || (error && apiGuns.length === 0)) {
       // Enrich local data with synthetic ids so FavoriteButton and detail work
-      return GUNS_LOCAL.map((g, i) => ({ ...g, id: g.id || `local-${i}` }))
+      const permanentlyDeleted = JSON.parse(localStorage.getItem('permanently_deleted_guns') || '[]')
+      const archived = JSON.parse(localStorage.getItem('archived_guns') || '[]')
+      return GUNS_LOCAL
+        .map((g, i) => ({ ...g, id: g.id || `local-${i}` }))
+        .filter((g) =>
+          !permanentlyDeleted.includes(g.id) &&
+          !archived.some((item) => String(item?.id ?? item) === String(g.id)),
+        )
     }
     return apiGuns
   }, [apiGuns, error, useLocal])
@@ -51,6 +60,18 @@ export default function Catalog({ onNavigate }) {
     )
     return sortItems(result, sortKey, sortOrder)
   }, [rawGuns, search, activeCategory, sortKey, sortOrder])
+
+  const pageFilters = JSON.stringify([search, activeCategory, sortKey, sortOrder])
+  const pageCount = Math.max(1, Math.ceil(filteredGuns.length / pageSize))
+  const currentPage = Math.min(
+    pageState.filters === pageFilters ? pageState.page : 1,
+    pageCount,
+  )
+  const changePage = (nextPage) => setPageState({ filters: pageFilters, page: nextPage })
+  const visibleGuns = filteredGuns.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
+  )
 
   // ---- detail view ----
   const [selectedGun, setSelectedGun] = useState(null)
@@ -166,7 +187,7 @@ export default function Catalog({ onNavigate }) {
         {/* Product grid */}
         {filteredGuns.length > 0 && (
           <ul className="stock">
-            {filteredGuns.map((gun) => (
+            {visibleGuns.map((gun) => (
               <GunCard
                 key={gun.id || gun.name}
                 gun={gun}
@@ -176,6 +197,43 @@ export default function Catalog({ onNavigate }) {
               />
             ))}
           </ul>
+        )}
+
+        {pageCount > 1 && (
+          <nav className="pagination" aria-label="Catalog pages">
+            <button
+              type="button"
+              className="btn btn--outline btn--sm"
+              onClick={() => changePage(currentPage - 1)}
+              disabled={currentPage === 1}
+              aria-label="Previous page"
+            >
+              <ChevronLeft size={16} /> Prev
+            </button>
+            <div className="pagination-pages">
+              {Array.from({ length: pageCount }, (_, index) => index + 1).map((pageNumber) => (
+                <button
+                  type="button"
+                  key={pageNumber}
+                  className={`btn btn--sm ${pageNumber === currentPage ? 'btn--primary' : 'btn--outline'}`}
+                  onClick={() => changePage(pageNumber)}
+                  aria-current={pageNumber === currentPage ? 'page' : undefined}
+                  aria-label={`Page ${pageNumber}`}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn--outline btn--sm"
+              onClick={() => changePage(currentPage + 1)}
+              disabled={currentPage === pageCount}
+              aria-label="Next page"
+            >
+              Next <ChevronRight size={16} />
+            </button>
+          </nav>
         )}
 
         {useLocal && (

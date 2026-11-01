@@ -2,10 +2,24 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const setImageHttpCacheHeaders = (server) => {
+  server.middlewares.use((request, response, next) => {
+    if (/\.(?:svg|png|jpe?g|webp|gif)(?:\?.*)?$/i.test(request.url || '')) {
+      response.setHeader('Cache-Control', 'public, max-age=3600')
+    }
+    next()
+  })
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    {
+      name: 'image-http-cache-headers',
+      configureServer: setImageHttpCacheHeaders,
+      configurePreviewServer: setImageHttpCacheHeaders,
+    },
     VitePWA({
       registerType: 'autoUpdate',
       devOptions: { enabled: true },
@@ -25,6 +39,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        globIgnores: ['**/guns/**'],
       },
     }),
   ],

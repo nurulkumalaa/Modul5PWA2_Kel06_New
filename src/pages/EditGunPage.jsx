@@ -25,7 +25,7 @@ import ConfirmModal from '../components/modals/ConfirmModal'
  * EditGunPage — Edit an existing weapon / hardware item.
  * Supports updating specs, steps, image replacement, and draft management.
  */
-export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
+export default function EditGunPage({ gun, gunId, onBack, onSuccess, resumeDraft = false }) {
   const targetId = gunId || gun?.id
 
   const [loading, setLoading] = useState(true)
@@ -46,6 +46,7 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
   })
 
   const [currentImageUrl, setCurrentImageUrl] = useState('')
+  const [additionalImagesText, setAdditionalImagesText] = useState('')
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -55,8 +56,18 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
   const [steps, setSteps] = useState([''])
 
   // Draft modal
-  const [showDraftModal, setShowDraftModal] = useState(() => (targetId ? hasDraft(targetId) : false))
+  const [showDraftModal, setShowDraftModal] = useState(() => (targetId ? hasDraft(targetId) && !resumeDraft : false))
   const [draftTimestamp, setDraftTimestamp] = useState(() => (targetId ? getDraftTimestamp(targetId) : null))
+
+  const applyDraft = (draft) => {
+    if (draft.formData) setFormData(draft.formData)
+    if (draft.specs) setSpecs(draft.specs)
+    if (draft.steps) setSteps(draft.steps)
+    if (draft.additionalImagesText) setAdditionalImagesText(draft.additionalImagesText)
+    if (draft.imagePreview) setImagePreview(draft.imagePreview)
+    setShowDraftModal(false)
+    setSuccessMsg('Draft siap dilanjutkan.')
+  }
 
   // Fetch initial data
   useEffect(() => {
@@ -89,6 +100,12 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
             is_featured: Boolean(data.is_featured),
           })
           setCurrentImageUrl(data.image_url || data.image || '/guns/pistol.svg')
+          const primaryImage = data.image_url || data.image || '/guns/pistol.svg'
+          setAdditionalImagesText(
+            (Array.isArray(data.images) ? data.images : [])
+              .filter((image) => image && image !== primaryImage)
+              .join('\n'),
+          )
 
           if (data.ingredients && data.ingredients.length > 0) {
             setSpecs(data.ingredients.map((ing) => ({
@@ -108,6 +125,10 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
             setSteps(['Standard manufacturer maintenance and cleaning protocol.'])
           }
 
+          if (resumeDraft) {
+            const draft = loadDraft(targetId)
+            if (draft) applyDraft(draft)
+          }
         } else {
           setError('Hardware record could not be loaded.')
         }
@@ -122,20 +143,13 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
       fetchGun()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetId])
+  }, [targetId, resumeDraft])
 
   // Draft operations
   const handleLoadDraft = () => {
     const draft = loadDraft(targetId)
     if (draft) {
-      if (draft.formData) setFormData(draft.formData)
-      if (draft.specs) setSpecs(draft.specs)
-      if (draft.steps) setSteps(draft.steps)
-      if (draft.imagePreview) {
-        setImagePreview(draft.imagePreview)
-      }
-      setShowDraftModal(false)
-      setSuccessMsg('Saved draft restored.')
+      applyDraft(draft)
       setTimeout(() => setSuccessMsg(''), 3000)
     }
   }
@@ -152,6 +166,7 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
       specs,
       steps,
       imagePreview: imagePreview || currentImageUrl,
+      additionalImagesText,
     }
     const saved = saveDraft(draftData, targetId)
     if (saved) {
@@ -273,6 +288,10 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
       category: formData.category || 'makanan',
       description: formData.description.trim() || `${formData.type} caliber ${formData.caliber}.`,
       image_url: imagePreview || currentImageUrl || '/guns/pistol.svg',
+      images: [...new Set([
+        imagePreview || currentImageUrl || '/guns/pistol.svg',
+        ...additionalImagesText.split('\n').map((url) => url.trim()).filter(Boolean),
+      ])],
       prep_time: 15,
       cook_time: Number(formData.price) || 500,
       servings: Number(formData.servings) || 1,
@@ -385,6 +404,20 @@ export default function EditGunPage({ gun, gunId, onBack, onSuccess }) {
                 </button>
               )}
             </div>
+          </div>
+          <div className="form-group">
+            <label htmlFor="edit-additional-images" className="form-label">
+              Gambar tambahan (satu URL per baris)
+            </label>
+            <textarea
+              id="edit-additional-images"
+              className="form-textarea"
+              rows="3"
+              value={additionalImagesText}
+              onChange={(event) => setAdditionalImagesText(event.target.value)}
+              placeholder="https://example.com/gambar-samping.jpg&#10;/guns/rifle.svg"
+            />
+            <span className="form-hint">Gambar pertama tetap menjadi gambar utama produk.</span>
           </div>
         </div>
 

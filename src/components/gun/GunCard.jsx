@@ -1,5 +1,6 @@
 import FavoriteButton from '../common/FavoriteButton'
 import { formatPrice, truncate } from '../../utils/helpers'
+import { Share2 } from 'lucide-react'
 
 /**
  * Product card used in the catalog grid.
@@ -15,6 +16,25 @@ export default function GunCard({ gun, onSelect, onEdit, onDelete }) {
   const category = gun.type || gun.category || '—'
   const caliber = gun.caliber || gun.difficulty || ''
   const price = gun.price ?? gun.cook_time ?? 0
+  const handleShare = async (event) => {
+    event.stopPropagation()
+    const url = new URL(window.location.href)
+    url.searchParams.set('gunId', gun.id)
+
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: gun.name, text: `Lihat produk ${gun.name}`, url: url.toString() })
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url.toString())
+      } else {
+        window.prompt('Salin link produk ini:', url.toString())
+      }
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error('Failed to share product link:', error)
+      }
+    }
+  }
 
   return (
     <li className="card">
@@ -50,6 +70,18 @@ export default function GunCard({ gun, onSelect, onEdit, onDelete }) {
       {/* Floating actions row */}
       <div className="card-actions">
         <FavoriteButton gunId={gun.id || gun.name} />
+
+        {gun.id && !String(gun.id).startsWith('local-') && (
+          <button
+            type="button"
+            className="card-act-btn"
+            onClick={handleShare}
+            aria-label={`Share ${gun.name}`}
+            title="Share product link"
+          >
+            <Share2 size={16} />
+          </button>
+        )}
 
         {onEdit && (
           <button

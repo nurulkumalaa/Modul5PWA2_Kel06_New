@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import gunService from '../services/gunService'
 
-// 3. Objek Cache Global untuk Query Caching
-const gunCache = {}
-
 export function useGuns(params = {}) {
   const [guns, setGuns] = useState([])
   const [loading, setLoading] = useState(true)
@@ -12,27 +9,19 @@ export function useGuns(params = {}) {
   
   const paramKey = JSON.stringify(params)
 
-  const fetchGuns = useCallback(async () => {
-    // Kembalikan dari cache jika ada
-    if (gunCache[paramKey]) {
-      setGuns(gunCache[paramKey].data)
-      setPagination(gunCache[paramKey].pagination)
-      setLoading(false)
-      return
-    }
-
+  const fetchGuns = useCallback(async (options = {}) => {
     try {
       setLoading(true)
       setError(null)
-      const response = await gunService.getGuns(params)
+      const response = await gunService.getGuns(params, options)
       if (response.success) {
         // 6. Filter data soft delete
+        const data = response.data || []
         const archives = JSON.parse(localStorage.getItem('archived_guns') || '[]')
-        const filteredData = (response.data || []).filter(g => !archives.includes(g.id))
-        
-        // Simpan ke memory cache
-        gunCache[paramKey] = { data: filteredData, pagination: response.pagination || null }
-        
+        const filteredData = data.filter((gun) =>
+          !archives.some((item) => String(item?.id ?? item) === String(gun.id)),
+        )
+
         setGuns(filteredData)
         setPagination(response.pagination || null)
       } else {
@@ -51,7 +40,13 @@ export function useGuns(params = {}) {
     fetchGuns()
   }, [fetchGuns])
 
-  return { guns, loading, error, pagination, refetch: fetchGuns }
+  return {
+    guns,
+    loading,
+    error,
+    pagination,
+    refetch: () => fetchGuns({ force: true }),
+  }
 }
 
 export function useGunById(id) {
@@ -70,7 +65,7 @@ export function useGunById(id) {
       
       // Filter soft delete
       const archives = JSON.parse(localStorage.getItem('archived_guns') || '[]')
-      if (archives.includes(id)) {
+      if (archives.some((item) => String(item?.id ?? item) === String(id))) {
          setError('Product has been archived or deleted.')
          setGun(null)
          setLoading(false)

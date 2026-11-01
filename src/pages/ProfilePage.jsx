@@ -1,85 +1,167 @@
-import { useState } from 'react'
-import { Shield, Copy, Check, Heart, FileText, Play, Edit3, Trash2, ArchiveRestore } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import {
+  Shield,
+  Copy,
+  Check,
+  Heart,
+  FileText,
+  Play,
+  MapPin,
+  Phone,
+  Info,
+  Archive,
+  Edit,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
 import userService from '../services/userService'
 import { useFavorites } from '../hooks/useFavorites'
-import { getAllDraftIds, loadDraft, deleteDraft } from '../utils/draftStorage'
+import {
+  getAllDraftIds,
+  loadDraft,
+  archiveDraft,
+  getArchivedDrafts,
+  restoreArchivedDraft,
+  permanentlyDeleteArchivedDraft,
+} from '../utils/draftStorage'
+import gunService from '../services/gunService'
 
 export default function ProfilePage({ onReplaySplash, onNavigate }) {
   const [profile] = useState(() => userService.getUserProfile())
   const [copied, setCopied] = useState(false)
   const { favorites } = useFavorites()
   
-  const [drafts, setDrafts] = useState(() => getAllDraftIds().map(id => ({ id, ...loadDraft(id) })))
-  const [archives, setArchives] = useState(() => JSON.parse(localStorage.getItem('archived_guns_detail') || '[]'))
+  const [drafts, setDrafts] = useState(() => {
+    return getAllDraftIds().map((id) => {
+      const data = loadDraft(id)
+      return { id, name: data?.formData?.name || `Draft (${id})` }
+    })
+  })
+  const [archivedDrafts, setArchivedDrafts] = useState(() => getArchivedDrafts())
+  const [draftError, setDraftError] = useState('')
+
+  const [archivedGuns, setArchivedGuns] = useState([])
+  const [archiveError, setArchiveError] = useState('')
+  const [archiveActionId, setArchiveActionId] = useState(null)
+
+  const loadArchivedItems = () => {
+    try {
+      const ids = JSON.parse(localStorage.getItem('archived_guns') || '[]')
+      const details = JSON.parse(localStorage.getItem('archived_guns_detail') || '[]')
+      const detailById = new Map(details.map((item) => [String(item.id), item]))
+      setArchivedGuns(ids.map((entry) => {
+        const id = entry?.id ?? entry
+        return detailById.get(String(id)) || (typeof entry === 'object' ? entry : { id })
+      }))
+    } catch (error) {
+      setArchiveError(error.message || 'Gagal memuat arsip.')
+    }
+  }
+
+  useEffect(() => {
+    loadArchivedItems()
+  }, [])
+
+  const handleRestore = async (id) => {
+    try {
+      setArchiveError('')
+      setArchiveActionId(id)
+      await gunService.restoreGun(id)
+      loadArchivedItems()
+    } catch (error) {
+      setArchiveError(error.message || 'Gagal mengembalikan item.')
+    } finally {
+      setArchiveActionId(null)
+    }
+  }
+
+  const handlePermanentDelete = async (id) => {
+    if (!window.confirm('Apakah Anda yakin ingin menghapus item ini secara PERMANEN?')) return
+    try {
+      setArchiveError('')
+      setArchiveActionId(id)
+      await gunService.permanentlyDeleteGun(id)
+      loadArchivedItems()
+    } catch (error) {
+      setArchiveError(error.message || 'Gagal menghapus item secara permanen.')
+    } finally {
+      setArchiveActionId(null)
+    }
+  }
 
   const handleCopyId = () => {
-    if (profile.userId) {
-      navigator.clipboard.writeText(profile.userId)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+    navigator.clipboard.writeText(profile.userId)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const refreshDrafts = () => {
+    setDrafts(getAllDraftIds().map((id) => {
+      const data = loadDraft(id)
+      return { id, name: data?.formData?.name || `Draft (${id})` }
+    }))
+    setArchivedDrafts(getArchivedDrafts())
+  }
+
+  const handleArchiveDraft = (id) => {
+    try {
+      setDraftError('')
+      archiveDraft(id)
+      refreshDrafts()
+    } catch (error) {
+      setDraftError(error.message || 'Gagal mengarsipkan draft.')
     }
   }
 
-  const handleDeleteDraft = (id) => {
-     deleteDraft(id)
-     setDrafts(getAllDraftIds().map(dId => ({ id: dId, ...loadDraft(dId) })))
-  }
-
-  // Fungsi untuk menghapus data secara permanen (Hard Delete) dari arsip
-  const handlePermanentDelete = (id) => {
-    if (window.confirm('PERINGATAN: Hardware ini akan dihapus secara permanen dan tidak dapat dipulihkan. Lanjutkan?')) {
-      // Hapus dari penyimpanan detail arsip
-      const archives = JSON.parse(localStorage.getItem('archived_guns_detail') || '[]');
-      const newArchivesData = archives.filter(a => a.id !== id);
-      localStorage.setItem('archived_guns_detail', JSON.stringify(newArchivesData));
-
-      // Hapus dari daftar ID arsip
-      const archiveIds = JSON.parse(localStorage.getItem('archived_guns') || '[]');
-      const newArchiveIds = archiveIds.filter(aId => aId !== id);
-      localStorage.setItem('archived_guns', JSON.stringify(newArchiveIds));
-      
-      // Perbarui state agar tampilan langsung ter-refresh
-      setArchives(newArchivesData);
-      alert('Hardware berhasil dihapus secara permanen!');
+  const handleRestoreDraft = (id) => {
+    try {
+      setDraftError('')
+      restoreArchivedDraft(id)
+      refreshDrafts()
+    } catch (error) {
+      setDraftError(error.message || 'Gagal memulihkan draft.')
     }
-  };
-
-const handleRestore = (id) => {
-  if (window.confirm('Pulihkan perangkat keras ini kembali ke katalog utama?')) {
-    // Hapus dari data arsip detail
-    const archives = JSON.parse(localStorage.getItem('archived_guns_detail') || '[]');
-    const newArchivesData = archives.filter(a => a.id !== id);
-    localStorage.setItem('archived_guns_detail', JSON.stringify(newArchivesData));
-
-    // Hapus dari daftar hitam ID arsip agar muncul kembali di useGuns
-    const archiveIds = JSON.parse(localStorage.getItem('archived_guns') || '[]');
-    const newArchiveIds = archiveIds.filter(aId => aId !== id);
-    localStorage.setItem('archived_guns', JSON.stringify(newArchiveIds));
-
-    alert('Hardware berhasil dipulihkan!');
-    window.location.reload(); // Refresh untuk memperbarui katalog
   }
-};
+
+  const handlePermanentlyDeleteDraft = (id) => {
+    if (!window.confirm('Hapus draft arsip ini secara permanen?')) return
+    try {
+      setDraftError('')
+      permanentlyDeleteArchivedDraft(id)
+      refreshDrafts()
+    } catch (error) {
+      setDraftError(error.message || 'Gagal menghapus draft.')
+    }
+  }
+
+  const handleContinueDraft = (id, archived = false) => {
+    try {
+      setDraftError('')
+      if (archived) restoreArchivedDraft(id)
+      onNavigate(id === 'create' ? 'Create' : 'Edit', {
+        id: id === 'create' ? undefined : id,
+        resumeDraft: true,
+      })
+    } catch (error) {
+      setDraftError(error.message || 'Gagal membuka draft.')
+    }
+  }
 
   return (
     <div className="profile-page">
-      <section className="masthead" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+      <section className="masthead" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="display">Operator Profile</h1>
-          <p className="lede">Operator credentials, procurement statistics, and armorer details.</p>
+          <p className="lede">Operator credentials and station details.</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {onReplaySplash && (
-            <button type="button" className="btn btn--outline btn--sm" onClick={onReplaySplash}>
-              <Play size={14} /> Replay Intro
-            </button>
-          )}
-          <button type="button" className="btn btn--primary btn--sm" onClick={() => onNavigate('EditProfile')}>
-            <Edit3 size={14} /> Edit Profile
+        {onReplaySplash && (
+          <button type="button" className="btn btn--outline btn--sm" onClick={onReplaySplash}>
+            <Play size={14} /> Replay Intro
           </button>
-        </div>
+        )}
       </section>
 
+      {/* Operator Card */}
       <div className="profile-card">
         <div className="profile-card-top">
           <div className="avatar-wrap">
@@ -91,9 +173,17 @@ const handleRestore = (id) => {
               </div>
             )}
           </div>
-          <div className="profile-identity">
-            <h2 className="display">{profile.username || 'Shooter'}</h2>
-            <p style={{ color: 'var(--steel)', margin: '0 0 10px 0' }}>{profile.bio || 'No bio provided.'}</p>
+          <div className="profile-identity" style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 className="display">{profile.username || 'Shooter'}</h2>
+              {/* Challenge 5: Edit Profile di Page Baru */}
+              <button type="button" className="btn btn--outline btn--sm" onClick={() => onNavigate?.('EditProfile')}>
+                <Edit size={14} /> Edit Profile
+              </button>
+            </div>
+            <p className="lede" style={{ fontSize: '0.9rem', margin: '4px 0 8px' }}>
+              {profile.bio || 'Tidak ada bio station.'}
+            </p>
             <div className="profile-id-row">
               <span className="mono-badge">{profile.userId}</span>
               <button type="button" className="icon-btn" onClick={handleCopyId}>
@@ -102,95 +192,125 @@ const handleRestore = (id) => {
             </div>
           </div>
         </div>
+
         <div className="profile-stats">
           <div className="stat-item">
-            <Heart size={20} className="stat-icon" stroke="var(--brass)" />
+            <Heart size={20} stroke="var(--brass)" />
             <div className="stat-val">{favorites.length}</div>
-            <div className="stat-label">Procurement Favorites</div>
+            <div className="stat-label">Favorites</div>
           </div>
           <div className="stat-item">
-            <FileText size={20} className="stat-icon" stroke="var(--steel)" />
+            <FileText size={20} stroke="var(--steel)" />
             <div className="stat-val">{drafts.length}</div>
-            <div className="stat-label">Saved Offline Drafts</div>
+            <div className="stat-label">Offline Drafts</div>
           </div>
         </div>
       </div>
 
-      <section className="detail-section" style={{ marginTop: '24px' }}>
-        <h2>Offline Drafts History</h2>
-        {drafts.length > 0 ? (
-          <ul className="review-list">
-            {drafts.map(d => (
-              <li key={d.id} className="review-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <strong>{d.formData?.name || 'Unnamed Product Draft'}</strong>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--steel)' }}>
-                    ID: {d.id} | Dibuat: {d.savedAt ? new Date(d.savedAt).toLocaleString() : 'Unknown'}
-                  </div>
-                </div>
-                <button className="btn btn--danger-ghost" onClick={() => handleDeleteDraft(d.id)} title="Hapus Draft">
-                  <Trash2 size={18}/>
-                </button>
-              </li>
-            ))}
-          </ul>
+      {/* Challenge 5: Section Draft */}
+      <div className="profile-card">
+        <h3 className="section-title">Saved Drafts</h3>
+        {drafts.length === 0 ? (
+          <p className="lede" style={{ fontSize: '0.9rem' }}>No active drafts.</p>
         ) : (
-          <p className="form-hint">Tidak ada data draft yang tersimpan di perangkat.</p>
-        )}
-      </section>
-
-      <section className="detail-section" style={{ marginTop: '24px' }}>
-        <h2>Archived Hardware</h2>
-        <p style={{ color: 'var(--steel)', fontSize: '0.9rem', marginBottom: '16px' }}>
-          Hardware yang dihapus (soft delete) disimpan di sini. Anda dapat memulihkannya kembali ke katalog.
-        </p>
-        
-{archives.length > 0 ? (
-          <ul className="review-list">
-            {archives.map(item => (
-              <li key={item.id} className="review-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
-                  <img 
-                    src={item.image_url || item.image || '/guns/pistol.svg'} 
-                    alt={item.name} 
-                    style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--line)' }} 
-                  />
-                  <div>
-                    <strong style={{ fontSize: '1.05rem' }}>{item.name}</strong>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--steel)' }}>
-                      Diarsipkan pada: {item.archivedAt ? new Date(item.archivedAt).toLocaleDateString() : 'Unknown'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Kumpulan Tombol Aksi: Restore & Hapus Permanen */}
+          <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {drafts.map((d) => (
+              <li key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper)', padding: '10px', borderRadius: '4px' }}>
+                <span>{d.name}</span>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  <button className="btn btn--outline btn--sm" onClick={() => handleRestore(item.id)} title="Restore ke Katalog">
-                    <ArchiveRestore size={16} /> Restore
+                  <button type="button" className="btn btn--primary btn--sm" onClick={() => handleContinueDraft(d.id)}>
+                    Lanjutkan Edit
                   </button>
-                  <button className="btn btn--danger btn--sm" onClick={() => handlePermanentDelete(item.id)} title="Hapus Permanen">
-                    <Trash2 size={16} /> Hapus Permanen
+                  <button type="button" className="btn btn--outline btn--sm" onClick={() => handleArchiveDraft(d.id)}>
+                    <Archive size={14} /> Arsipkan
                   </button>
                 </div>
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="form-hint">Tidak ada hardware yang berada di dalam arsip saat ini.</p>
         )}
-      </section>
+      </div>
 
-      <section className="detail-section" style={{ marginTop: '24px' }}>
-        <h2>About Bore & Barrel</h2>
-        <p>A one-room armory. Bore &amp; Barrel sells a short, honest list of firearms. Each piece is priced from the bench — no markup theatre, no filler.</p>
-      </section>
+      <div className="profile-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Archive size={18} stroke="var(--brass)" />
+          <h3 className="section-title" style={{ margin: 0 }}>Draft Archive</h3>
+        </div>
+        {archivedDrafts.length === 0 ? (
+          <p className="lede" style={{ fontSize: '0.9rem', marginTop: '8px' }}>Belum ada draft di arsip.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {archivedDrafts.map((draft) => (
+              <li key={draft.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper)', padding: '10px', borderRadius: '4px' }}>
+                <span>{draft.name}</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="btn btn--primary btn--sm" onClick={() => handleContinueDraft(draft.id, true)}>
+                    Lanjutkan Edit
+                  </button>
+                  <button type="button" className="btn btn--outline btn--sm" onClick={() => handleRestoreDraft(draft.id)}>
+                    <RotateCcw size={14} /> Restore
+                  </button>
+                  <button type="button" className="btn btn--danger btn--sm" onClick={() => handlePermanentlyDeleteDraft(draft.id)}>
+                    <Trash2 size={14} /> Delete Permanen
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {draftError && <p className="form-error" role="alert">{draftError}</p>}
+      </div>
 
-      <section className="detail-section" style={{ marginTop: '24px' }}>
-        <h2>Contact & Headquarters</h2>
-        <p><strong>Location:</strong> 123 Range Road, Sector 7.</p>
-        <p><strong>Operational:</strong> Open Tuesday to Saturday, 10:00 AM to 18:00 PM.</p>
-        <p><strong>Comms:</strong> (555) 010-0100</p>
-      </section>
+      {/* Challenge 6: Section Soft Delete / Arsip (Bisa Restore & Delete Permanen) */}
+      <div className="profile-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Archive size={18} stroke="var(--brass)" />
+          <h3 className="section-title" style={{ margin: 0 }}>Archived Items (Soft Delete)</h3>
+        </div>
+        {archivedGuns.length === 0 ? (
+          <p className="lede" style={{ fontSize: '0.9rem', marginTop: '8px' }}>Belum ada item yang di-soft delete / diarsip.</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0, margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {archivedGuns.map((item, idx) => (
+              <li key={item.id || idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--paper)', padding: '10px', borderRadius: '4px' }}>
+                <span>{item.name || `Archived Item #${idx + 1}`}</span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button type="button" className="btn btn--outline btn--sm" onClick={() => handleRestore(item.id)} disabled={archiveActionId === item.id}>
+                    <RotateCcw size={14} /> Restore
+                  </button>
+                  <button type="button" className="btn btn--danger btn--sm" onClick={() => handlePermanentDelete(item.id)} disabled={archiveActionId === item.id}>
+                    <Trash2 size={14} /> Delete Permanen
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {archiveError && <p className="form-error" role="alert">{archiveError}</p>}
+      </div>
+
+      {/* Challenge 5: Section About */}
+      <div className="profile-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Info size={18} stroke="var(--brass)" />
+          <h3 className="section-title" style={{ margin: 0 }}>About Armory</h3>
+        </div>
+        <p className="lede" style={{ marginTop: '8px' }}>
+          Bore &amp; Barrel sells a short, honest list of firearms. Each piece is priced from the bench — no markup theatre.
+        </p>
+      </div>
+
+      {/* Challenge 5: Section Contact */}
+      <div className="profile-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <MapPin size={18} stroke="var(--brass)" />
+          <h3 className="section-title" style={{ margin: 0 }}>Contact & Location</h3>
+        </div>
+        <p className="lede" style={{ marginTop: '8px' }}>123 Range Road. Open Tuesday to Saturday, 10 to 6.</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', color: 'var(--steel)' }}>
+          <Phone size={15} /> (555) 010-0100
+        </div>
+      </div>
     </div>
   )
 }

@@ -25,7 +25,7 @@ import ConfirmModal from '../components/modals/ConfirmModal'
  * CreateGunPage — Create a new weapon / hardware item with image upload,
  * draft persistence (auto-save), specs, and assembly steps.
  */
-export default function CreateGunPage({ onBack, onSuccess }) {
+export default function CreateGunPage({ onBack, onSuccess, resumeDraft = false }) {
   // Step state: 'upload' (upload or choose image) or 'form' (enter details)
   const [currentStep, setCurrentStep] = useState('upload')
 
@@ -44,6 +44,7 @@ export default function CreateGunPage({ onBack, onSuccess }) {
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [uploadedImageUrl, setUploadedImageUrl] = useState('')
+  const [additionalImagesText, setAdditionalImagesText] = useState('')
 
   // Specifications (ingredients in API)
   const [specs, setSpecs] = useState([
@@ -64,7 +65,7 @@ export default function CreateGunPage({ onBack, onSuccess }) {
   const [successMsg, setSuccessMsg] = useState('')
 
   // Draft management
-  const [showDraftModal, setShowDraftModal] = useState(() => hasDraft('create'))
+  const [showDraftModal, setShowDraftModal] = useState(() => hasDraft('create') && !resumeDraft)
   const [draftTimestamp, setDraftTimestamp] = useState(() => getDraftTimestamp('create'))
 
   const handleSaveDraft = useCallback((notify = true) => {
@@ -73,6 +74,7 @@ export default function CreateGunPage({ onBack, onSuccess }) {
       specs,
       steps,
       uploadedImageUrl,
+      additionalImagesText,
     }
     const saved = saveDraft(draftData, 'create')
     if (saved) {
@@ -83,7 +85,7 @@ export default function CreateGunPage({ onBack, onSuccess }) {
         setTimeout(() => setSuccessMsg(''), 3000)
       }
     }
-  }, [formData, specs, steps, uploadedImageUrl])
+  }, [formData, specs, steps, uploadedImageUrl, additionalImagesText])
 
   // Auto-save draft every 30 seconds while in form step
   useEffect(() => {
@@ -102,16 +104,19 @@ export default function CreateGunPage({ onBack, onSuccess }) {
       if (draft.formData) setFormData(draft.formData)
       if (draft.specs) setSpecs(draft.specs)
       if (draft.steps) setSteps(draft.steps)
-      if (draft.uploadedImageUrl) {
-        setUploadedImageUrl(draft.uploadedImageUrl)
-        setImagePreview(draft.uploadedImageUrl)
-        setCurrentStep('form')
-      }
+      if (draft.additionalImagesText) setAdditionalImagesText(draft.additionalImagesText)
+      if (draft.uploadedImageUrl) setUploadedImageUrl(draft.uploadedImageUrl)
+      if (draft.uploadedImageUrl) setImagePreview(draft.uploadedImageUrl)
+      setCurrentStep('form')
       setShowDraftModal(false)
       setSuccessMsg('Draft successfully loaded.')
       setTimeout(() => setSuccessMsg(''), 4000)
     }
   }
+
+  useEffect(() => {
+    if (resumeDraft) handleLoadDraft()
+  }, [resumeDraft])
 
   const handleDiscardDraft = () => {
     deleteDraft('create')
@@ -262,6 +267,10 @@ export default function CreateGunPage({ onBack, onSuccess }) {
       category: formData.category || 'makanan',
       description: formData.description.trim() || `${formData.type} caliber ${formData.caliber}.`,
       image_url: uploadedImageUrl || '/guns/pistol.svg',
+      images: [...new Set([
+        uploadedImageUrl || '/guns/pistol.svg',
+        ...additionalImagesText.split('\n').map((url) => url.trim()).filter(Boolean),
+      ])],
       prep_time: 15,
       cook_time: Number(formData.price) || 500, // Price stored in cook_time
       servings: Number(formData.servings) || 1,
@@ -461,6 +470,21 @@ export default function CreateGunPage({ onBack, onSuccess }) {
             >
               Change Image
             </button>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="additional-images" className="form-label">
+              Gambar tambahan (satu URL per baris)
+            </label>
+            <textarea
+              id="additional-images"
+              className="form-textarea"
+              rows="3"
+              value={additionalImagesText}
+              onChange={(event) => setAdditionalImagesText(event.target.value)}
+              placeholder="https://example.com/gambar-samping.jpg&#10;/guns/rifle.svg"
+            />
+            <span className="form-hint">Gambar pertama tetap menjadi gambar utama produk.</span>
           </div>
 
           {/* Core Info */}

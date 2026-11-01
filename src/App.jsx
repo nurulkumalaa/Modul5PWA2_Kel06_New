@@ -29,6 +29,7 @@ function App() {
 
   const handleNavigate = (target, payload) => {
     if (target === 'Create') {
+      setEditingGun(payload || null)
       setMode('create')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } else if (target === 'Edit') {
@@ -105,10 +106,10 @@ function App() {
           </div>
         }>
           {mode === 'create' && (
-            <CreateGunPage onBack={handleBackToList} onSuccess={() => { handleBackToList(); setTab('Catalog'); }} />
+            <CreateGunPage resumeDraft={Boolean(editingGun?.resumeDraft)} onBack={handleBackToList} onSuccess={() => { handleBackToList(); setTab('Catalog'); }} />
           )}
           {mode === 'edit' && (
-            <EditGunPage gun={editingGun} gunId={editingGun?.id} onBack={handleBackToList} onSuccess={() => { handleBackToList(); setTab('Catalog'); }} />
+            <EditGunPage gun={editingGun?.resumeDraft ? null : editingGun} gunId={editingGun?.id} resumeDraft={Boolean(editingGun?.resumeDraft)} onBack={handleBackToList} onSuccess={() => { handleBackToList(); setTab('Catalog'); }} />
           )}
           {mode === 'detail' && selectedGun && (
             <GunDetail gun={selectedGun} onBack={handleBackToList} onEdit={(g) => handleNavigate('Edit', g)} onDelete={(g) => setDeleteTarget(g)} />

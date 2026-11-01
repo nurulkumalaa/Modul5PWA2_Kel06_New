@@ -11,6 +11,7 @@
 
 const PREFIX = 'gun_draft_'
 const TS_SUFFIX = '_ts'
+const ARCHIVED_DRAFTS_KEY = 'archived_gun_drafts'
 
 /**
  * Persist a draft object.
@@ -106,6 +107,51 @@ export const getAllDraftIds = () => {
   } catch {
     return []
   }
+}
+
+export const getArchivedDrafts = () => {
+  const raw = localStorage.getItem(ARCHIVED_DRAFTS_KEY)
+  return raw ? JSON.parse(raw) : []
+}
+
+export const archiveDraft = (draftId) => {
+  const draft = loadDraft(draftId)
+  if (!draft) throw new Error('Draft tidak ditemukan.')
+
+  const archived = getArchivedDrafts()
+  if (!archived.some((item) => item.id === draftId)) {
+    archived.push({
+      id: draftId,
+      name: draft.formData?.name || `Draft (${draftId})`,
+      savedAt: getDraftTimestamp(draftId) || draft.savedAt || new Date().toISOString(),
+      data: draft,
+    })
+    localStorage.setItem(ARCHIVED_DRAFTS_KEY, JSON.stringify(archived))
+  }
+  if (!deleteDraft(draftId)) throw new Error('Draft gagal dipindahkan ke arsip.')
+}
+
+export const restoreArchivedDraft = (draftId) => {
+  const archived = getArchivedDrafts()
+  const draft = archived.find((item) => item.id === draftId)
+  if (!draft) throw new Error('Draft arsip tidak ditemukan.')
+  if (hasDraft(draftId)) throw new Error('Draft aktif dengan ID ini sudah ada.')
+
+  const key = `${PREFIX}${draftId}`
+  localStorage.setItem(key, JSON.stringify(draft.data))
+  localStorage.setItem(`${key}${TS_SUFFIX}`, draft.savedAt)
+  localStorage.setItem(
+    ARCHIVED_DRAFTS_KEY,
+    JSON.stringify(archived.filter((item) => item.id !== draftId)),
+  )
+}
+
+export const permanentlyDeleteArchivedDraft = (draftId) => {
+  const archived = getArchivedDrafts()
+  localStorage.setItem(
+    ARCHIVED_DRAFTS_KEY,
+    JSON.stringify(archived.filter((item) => item.id !== draftId)),
+  )
 }
 
 /**

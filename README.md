@@ -19,6 +19,30 @@ npm run preview  # serve the production build
 npm run lint     # oxlint
 ```
 
+## Catalog features
+
+- The catalog displays six products per page and supports previous/next and
+  direct page navigation. Product-list queries and individual product lookups
+  are cached for 60 seconds in application storage and invalidated after
+  product mutations; API query caching is not handled by the service worker.
+- Local product images use the browser's HTTP cache with a one-hour freshness
+  lifetime. In DevTools Network, select Img to inspect image requests and
+  transfer sizes; Chrome chooses whether to report a cache hit as memory or
+  disk cache. Remote image hosts must send their own `Cache-Control` response
+  header for browser HTTP caching.
+- Product details for server-backed products can be shared as a direct link;
+  opening a link loads the corresponding product by its ID.
+- Archived products can be restored or permanently deleted from the Profile
+  page. Permanent deletion removes server-backed products from the API.
+- Saved drafts in Profile can be moved to a draft archive, restored, or
+  permanently deleted. Use **Lanjutkan Edit** to reopen a saved active or
+  archived draft in its create/edit form and continue before posting.
+- Create and edit forms accept additional image URLs, one per line. The first
+  image remains the product cover; additional images appear as selectable
+  thumbnails in the product detail view. When using Supabase, additional image
+  URLs are kept in this browser's local storage because the products table
+  currently stores only `image_url`.
+
 ## Structure
 
 ```
